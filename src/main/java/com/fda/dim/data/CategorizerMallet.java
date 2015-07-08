@@ -11,13 +11,13 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import cc.mallet.types.Instance;
+
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
-import cc.mallet.types.Instance;
 
 public class CategorizerMallet {
 	static Logger slf4jLogger = LoggerFactory
@@ -29,7 +29,7 @@ public class CategorizerMallet {
 			FileWriter writer = new FileWriter(
 					"/tudelft.net/staff-bulk/ewi/insy/mmc/nathan/dim-data/yelp_full.mallet");
 
-			Gson gson = new GsonBuilder().setPrettyPrinting().create();
+			Gson gson = new Gson();
 			Type categoryType = new TypeToken<List<String>>() {
 			}.getType();
 			BufferedReader businessBr = new BufferedReader(
