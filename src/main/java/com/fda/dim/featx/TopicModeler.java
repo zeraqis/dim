@@ -36,18 +36,21 @@ public class TopicModeler {
 		// Begin by importing documents from text to feature sequences
 		ArrayList<Pipe> pipeList = new ArrayList<Pipe>();
 
+		// String stopPath="/home/spyros/git/fda/dim/assets/stopwords.txt";
+		String stopPath = "/tudelft.net/staff-bulk/ewi/insy/mmc/nathan/dim-data/en.txt";
+		
 		// Pipes: lowercase, tokenize, remove stopwords, map to features
 		pipeList.add(new CharSequenceLowercase());
 		pipeList.add(new CharSequence2TokenSequence(Pattern
 				.compile("\\p{L}[\\p{L}\\p{P}]+\\p{L}")));
-		pipeList.add(new TokenSequenceRemoveStopwords(new File(
-				"/home/spyros/git/fda/dim/assets/stopwords.txt"), "UTF-8",
-				false, false, false));
+		pipeList.add(new TokenSequenceRemoveStopwords(new File(stopPath),
+				"UTF-8", false, false, false));
 		pipeList.add(new TokenSequence2FeatureSequence());
 
 		InstanceList instances = new InstanceList(new SerialPipes(pipeList));
 
-		String filepath = "/home/spyros/Documents/data/yelp_full.mallet";
+		// String filepath = "/home/spyros/Documents/data/yelp_full.mallet";
+		String filepath = "/tudelft.net/staff-bulk/ewi/insy/mmc/nathan/dim-data/yelp_full.mallet";
 		BufferedReader br = new BufferedReader(new FileReader(
 				new File(filepath)));
 		String line;
