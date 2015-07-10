@@ -35,8 +35,8 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 public class TopicModeler {
-	static Logger slf4jLogger = LoggerFactory
-			.getLogger(TopicModeler.class);
+	static Logger slf4jLogger = LoggerFactory.getLogger(TopicModeler.class);
+
 	public static InstanceList createInstanceList() {
 		// Begin by importing documents from text to feature sequences
 		ArrayList<Pipe> pipeList = new ArrayList<Pipe>();
@@ -60,7 +60,7 @@ public class TopicModeler {
 	public static void main(String[] args) throws Exception {
 
 		// String filepath = "/home/spyros/Documents/data/yelp_full.mallet";
-		String filepath = "/tudelft.net/staff-bulk/ewi/insy/mmc/nathan/dim-data/yelp_full.mallet";
+		String filepath = "/tudelft.net/staff-bulk/ewi/insy/mmc/nathan/dim-data/";
 		// BufferedReader br = new BufferedReader(new FileReader(
 		// new File(filepath)));
 		String line;
@@ -68,12 +68,13 @@ public class TopicModeler {
 		Type malletInstanceType = new TypeToken<Instance>() {
 		}.getType();
 
-		File[] malletFiles = new File("").listFiles();
+		File[] malletFiles = new File(filepath).listFiles();
 		HashMap<String, InstanceList> allInstanceLists = new HashMap<String, InstanceList>();
 		// HashMap<String, ParallelTopicModel> allParallelTopicModels = new
 		// HashMap<String, ParallelTopicModel>();
 
-		HashMap<CategoryFoldPair, InstanceList> trainInstanceLists = new HashMap<CategoryFoldPair, InstanceList>();
+		// HashMap<CategoryFoldPair, InstanceList> trainInstanceLists = new
+		// HashMap<CategoryFoldPair, InstanceList>();
 		HashMap<CategoryFoldPair, InstanceList> testInstanceLists = new HashMap<CategoryFoldPair, InstanceList>();
 
 		HashMap<CategoryFoldPair, ParallelTopicModel> allTrainParallelTopicModels = new HashMap<CategoryFoldPair, ParallelTopicModel>();
@@ -87,14 +88,18 @@ public class TopicModeler {
 		allCategories.addAll(Arrays.asList(categoriesArray));
 
 		// read all files and create the InstanceLists
+		slf4jLogger.info("read all files and create the InstanceLists");
 		for (File malletFile : malletFiles) {
-
+			if(!malletFile.getName().endsWith(".mallet")){
+				continue;
+			}
 			// get the category from the file name
+			slf4jLogger.info("Filename : {}", malletFile.getName().split(".")[0]);
 			String currentCategory = malletFile.getName().split(".")[1];
 			if (!allCategories.contains(currentCategory)) {
 				continue;
 			}
-
+			slf4jLogger.info("currentCategory:{}", currentCategory);
 			// create reader to read the file
 			BufferedReader reader = new BufferedReader(new FileReader(
 					malletFile));
@@ -120,7 +125,7 @@ public class TopicModeler {
 					.crossValidationIterator(10);
 			int fold = 1;
 			while (currCrossVal.hasNext()) {
-
+				slf4jLogger.info("fold:{}", fold);
 				// trainInstanceLists.put(new CategoryFoldPair(currentCategory,
 				// fold),
 				// currCrossVal.nextSplit()[0]);
@@ -166,6 +171,7 @@ public class TopicModeler {
 
 			reader.close();
 		}
+		slf4jLogger.info("Generating Test");
 		HashMap<Integer, InstanceList> foldInstanceLists = new HashMap<Integer, InstanceList>();
 		for (int i = 1; i <= 10; i++) {
 			for (CategoryFoldPair pair : testInstanceLists.keySet()) {
@@ -185,6 +191,7 @@ public class TopicModeler {
 		double MRR = 0;
 
 		for (int i = 1; i <= 10; i++) {
+			slf4jLogger.info("Test fold : {}", i);
 			InstanceList currTestInstanceList = foldInstanceLists.get(Integer
 					.valueOf(i));
 			for (Instance testInstance : currTestInstanceList) {
