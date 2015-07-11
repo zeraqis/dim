@@ -14,6 +14,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -60,10 +61,11 @@ public class TopicModeler {
 	public static void main(String[] args) throws Exception {
 
 		// String filepath = "/home/spyros/Documents/data/yelp_full.mallet";
-		String filepath = "/tudelft.net/staff-bulk/ewi/insy/mmc/nathan/dim-data/";
+		String filepath = "/tudelft.net/staff-bulk/ewi/insy/mmc/nathan/dim-data";
 		// BufferedReader br = new BufferedReader(new FileReader(
 		// new File(filepath)));
 		String line;
+		// Random r = new Random();
 		Gson gson = new Gson();
 		Type malletInstanceType = new TypeToken<Instance>() {
 		}.getType();
@@ -90,16 +92,22 @@ public class TopicModeler {
 		// read all files and create the InstanceLists
 		slf4jLogger.info("read all files and create the InstanceLists");
 		for (File malletFile : malletFiles) {
-			if(!malletFile.getName().endsWith(".mallet")){
+
+			if (!malletFile.getName().endsWith(".mallet")) {
 				continue;
 			}
 			// get the category from the file name
-			slf4jLogger.info("Filename : {}", malletFile.getName().split(".")[0]);
-			String currentCategory = malletFile.getName().split(".")[1];
+			slf4jLogger.info("Filename : {}", malletFile.getName());
+
+			int firstIndex = malletFile.getName().indexOf('.');
+			int lastIndex = malletFile.getName().lastIndexOf('.');
+			String currentCategory = malletFile.getName().substring(
+					firstIndex + 1, lastIndex);
+			slf4jLogger.info("currentCategory:{}", currentCategory);
+
 			if (!allCategories.contains(currentCategory)) {
 				continue;
 			}
-			slf4jLogger.info("currentCategory:{}", currentCategory);
 			// create reader to read the file
 			BufferedReader reader = new BufferedReader(new FileReader(
 					malletFile));
@@ -152,7 +160,7 @@ public class TopicModeler {
 				// Run the model for 50 iterations and stop (this is for testing
 				// only,
 				// for real applications, use 1000 to 2000 iterations)
-				currentModel.setNumIterations(50);
+				currentModel.setNumIterations(1000);
 				currentModel.estimate();
 
 				// store the model in the Map
@@ -171,62 +179,72 @@ public class TopicModeler {
 
 			reader.close();
 		}
-		slf4jLogger.info("Generating Test");
-		HashMap<Integer, InstanceList> foldInstanceLists = new HashMap<Integer, InstanceList>();
-		for (int i = 1; i <= 10; i++) {
-			for (CategoryFoldPair pair : testInstanceLists.keySet()) {
-
-				if (pair.fold == i) {
-
-					if (!foldInstanceLists.containsKey(i)) {
-						foldInstanceLists.put(i, new InstanceList());
-					}
-
-					foldInstanceLists.get(i)
-							.addAll(testInstanceLists.get(pair));
-				}
-			}
-		}
 
 		double MRR = 0;
-
+		double randomMRR = 0;
+		int instanceSize = 0;
+		slf4jLogger.info("Generating Test");
 		for (int i = 1; i <= 10; i++) {
-			slf4jLogger.info("Test fold : {}", i);
-			InstanceList currTestInstanceList = foldInstanceLists.get(Integer
-					.valueOf(i));
-			for (Instance testInstance : currTestInstanceList) {
-				Map<String, Double> categoryProb = new HashMap<String, Double>();
-				for (String category : allCategories) {
-					for (Entry<CategoryFoldPair, ParallelTopicModel> entry : allTrainParallelTopicModels
-							.entrySet()) {
-						if (entry.getKey().category.equals(category)
-								&& entry.getKey().fold == i) {
-							TopicInferencer currInferer = entry.getValue()
-									.getInferencer();
-							double[] topicDistribution = currInferer
-									.getSampledDistribution(testInstance, 50,
-											10, 10);
+			slf4jLogger.info("fold : {}", i);
+			for (CategoryFoldPair pair : testInstanceLists.keySet()) {
+				if (pair.fold == i) {
+					InstanceList currTestInstanceList = testInstanceLists
+							.get(pair);
+					instanceSize = currTestInstanceList.size();
+					slf4jLogger.info("Size : {}", instanceSize);
+					for (Instance testInstance : currTestInstanceList) {
+						Map<String, Double> categoryProb = new HashMap<String, Double>();
+						for (String category : allCategories) {
+							for (Entry<CategoryFoldPair, ParallelTopicModel> entry : allTrainParallelTopicModels
+									.entrySet()) {
+								if (entry.getKey().category.equals(category)
+										&& entry.getKey().fold == i) {
+									TopicInferencer currInferer = entry
+											.getValue().getInferencer();
+									double[] topicDistribution = currInferer
+											.getSampledDistribution(
+													testInstance, 50, 10, 10);
 
-							categoryProb.put(category,
-									average(topicDistribution));
+									categoryProb.put(category,
+											average(topicDistribution));
 
+								}
+							}
+						}
+						String actualCategory = (String) testInstance
+								.getTarget();
+						Map<String, Double> sortedCategoryProb = sortByValue(categoryProb);
+						double rank = 1;
+						for (Entry<String, Double> entry : sortedCategoryProb
+								.entrySet()) {
+							if (entry.getKey().equals(actualCategory)) {
+								MRR += 1 / rank;
+								break;
+							}
+							rank++;
+						}
+
+						long seed = System.nanoTime();
+						List<String> randCategories = new ArrayList<String>(
+								allCategories);
+						Collections.shuffle(randCategories, new Random(seed));
+						double randomRank = 1;
+						for (String rCategory : randCategories) {
+							if (rCategory.equals(actualCategory)) {
+								randomMRR += 1 / randomRank;
+								break;
+							}
+							randomRank++;
 						}
 					}
 				}
-				String actualCategory = (String) testInstance.getTarget();
-				Map<String, Double> sortedCategoryProb = sortByValue(categoryProb);
-				double rank = 1;
-				for (Entry<String, Double> entry : sortedCategoryProb
-						.entrySet()) {
-					if (entry.getKey().equals(actualCategory)) {
-						MRR += 1 / rank;
-						break;
-					}
-					rank++;
-				}
 			}
 		}
-		slf4jLogger.info("MRR : {}", MRR);
+
+		slf4jLogger.info("MRR : {}", MRR
+				/ (instanceSize * allCategories.size() * 10));
+		slf4jLogger.info("randomMRR : {}", randomMRR
+				/ (instanceSize * allCategories.size() * 10));
 	}
 
 	public static double average(double[] numbers) {
