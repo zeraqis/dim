@@ -3,6 +3,8 @@ package com.fda.dim.featx;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,6 +39,54 @@ import com.google.gson.reflect.TypeToken;
 
 public class TopicModeler {
 	static Logger slf4jLogger = LoggerFactory.getLogger(TopicModeler.class);
+
+	static int numFolds = 10;
+
+	public static void displayInputConsole(
+			ArrayList<String> allCategories,
+			Map<CategoryFoldPair, ParallelTopicModel> allTrainParallelTopicModels) {
+
+		BufferedReader reader = null;
+		try {
+			String userInput = null;
+
+			System.out.println("Input review\n >_ ");
+			reader = new BufferedReader(new InputStreamReader(System.in));
+
+			while (true) {
+
+				userInput = reader.readLine();
+
+				if (userInput == null) {
+					continue;
+				}
+
+				if (userInput.equals("exit")) {
+					continue;
+				}
+				InstanceList currInstanceList = createInstanceList();
+				Instance testInstance = new Instance(userInput, null, null,
+						null);
+				currInstanceList.addThruPipe(testInstance);
+				for (Instance currInstance : currInstanceList) {
+					categorizeSingleInstance(currInstance, allCategories,
+							allTrainParallelTopicModels);
+				}
+				System.out.println("Input review\n >_ ");
+
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			if (reader != null) {
+				try {
+					reader.close();
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+			}
+		}
+	}
 
 	public static InstanceList createInstanceList() {
 		// Begin by importing documents from text to feature sequences
@@ -88,7 +138,7 @@ public class TopicModeler {
 				"Fitness_&_Instruction" };
 		ArrayList<String> allCategories = new ArrayList<String>();
 		allCategories.addAll(Arrays.asList(categoriesArray));
-
+		int countDown = allCategories.size();
 		// read all files and create the InstanceLists
 		slf4jLogger.info("read all files and create the InstanceLists");
 		for (File malletFile : malletFiles) {
@@ -97,17 +147,18 @@ public class TopicModeler {
 				continue;
 			}
 			// get the category from the file name
-			slf4jLogger.info("Filename : {}", malletFile.getName());
+			slf4jLogger.info("Filename : {} To Go : {}", malletFile.getName(),
+					countDown--);
 
 			int firstIndex = malletFile.getName().indexOf('.');
 			int lastIndex = malletFile.getName().lastIndexOf('.');
 			String currentCategory = malletFile.getName().substring(
 					firstIndex + 1, lastIndex);
-			slf4jLogger.info("currentCategory:{}", currentCategory);
 
 			if (!allCategories.contains(currentCategory)) {
 				continue;
 			}
+			slf4jLogger.info("currentCategory:{}", currentCategory);
 			// create reader to read the file
 			BufferedReader reader = new BufferedReader(new FileReader(
 					malletFile));
@@ -130,7 +181,7 @@ public class TopicModeler {
 				}
 			}
 			CrossValidationIterator currCrossVal = currentInstanceList
-					.crossValidationIterator(10);
+					.crossValidationIterator(numFolds);
 			int fold = 1;
 			while (currCrossVal.hasNext()) {
 				slf4jLogger.info("fold:{}", fold);
@@ -160,7 +211,7 @@ public class TopicModeler {
 				// Run the model for 50 iterations and stop (this is for testing
 				// only,
 				// for real applications, use 1000 to 2000 iterations)
-				currentModel.setNumIterations(1000);
+				currentModel.setNumIterations(50);
 				currentModel.estimate();
 
 				// store the model in the Map
@@ -184,7 +235,7 @@ public class TopicModeler {
 		double randomMRR = 0;
 		int instanceSize = 0;
 		slf4jLogger.info("Generating Test");
-		for (int i = 1; i <= 10; i++) {
+		for (int i = 1; i <= numFolds; i++) {
 			slf4jLogger.info("fold : {}", i);
 			for (CategoryFoldPair pair : testInstanceLists.keySet()) {
 				if (pair.fold == i) {
@@ -204,10 +255,12 @@ public class TopicModeler {
 									double[] topicDistribution = currInferer
 											.getSampledDistribution(
 													testInstance, 50, 10, 10);
-
-									categoryProb.put(category,
-											average(topicDistribution));
-
+									Arrays.sort(topicDistribution);
+									categoryProb
+											.put(category,
+													topicDistribution[topicDistribution.length - 1]);
+									// slf4jLogger.info("Average : {}",
+									// topicDistribution);
 								}
 							}
 						}
@@ -242,9 +295,12 @@ public class TopicModeler {
 		}
 
 		slf4jLogger.info("MRR : {}", MRR
-				/ (instanceSize * allCategories.size() * 10));
+				/ (instanceSize * allCategories.size() * numFolds));
 		slf4jLogger.info("randomMRR : {}", randomMRR
-				/ (instanceSize * allCategories.size() * 10));
+				/ (instanceSize * allCategories.size() * numFolds));
+
+		// displayInputConsole(allCategories, allTrainParallelTopicModels);
+
 	}
 
 	public static double average(double[] numbers) {
@@ -271,6 +327,46 @@ public class TopicModeler {
 			result.put(entry.getKey(), entry.getValue());
 		}
 		return result;
+	}
+
+	public static void categorizeSingleInstance(
+			Instance testInstance,
+			ArrayList<String> allCategories,
+			Map<CategoryFoldPair, ParallelTopicModel> allTrainParallelTopicModels) {
+		Map<String, Double> categoryProb = new HashMap<String, Double>();
+		for (String category : allCategories) {
+			categoryProb.put(category, Double.valueOf(0));
+		}
+
+		for (int i = 1; i <= numFolds; i++) {
+			for (String category : allCategories) {
+				for (Entry<CategoryFoldPair, ParallelTopicModel> entry : allTrainParallelTopicModels
+						.entrySet()) {
+					if (entry.getKey().category.equals(category)
+							&& entry.getKey().fold == i) {
+						TopicInferencer currInferer = entry.getValue()
+								.getInferencer();
+						double[] topicDistribution = currInferer
+								.getSampledDistribution(testInstance, 50, 10,
+										10);
+						Arrays.sort(topicDistribution);
+						categoryProb
+								.put(category,
+										categoryProb.get(category)
+												+ topicDistribution[topicDistribution.length - 1]);
+						// slf4jLogger.info("Average : {}",
+						// topicDistribution);
+					}
+				}
+			}
+		}
+		for (Entry<String, Double> entry : categoryProb.entrySet()) {
+			categoryProb.put(entry.getKey(), categoryProb.get(entry.getKey())
+					/ numFolds);
+		}
+		Map<String, Double> sortedCategoryProb = sortByValue(categoryProb);
+
+		slf4jLogger.info("Result : {}", sortedCategoryProb);
 	}
 }
 
